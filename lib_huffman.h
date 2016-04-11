@@ -12,7 +12,7 @@
 #include "vhboard.h"
 
 // Uncomment for enabling encoder, extra ~3K SRAM vars
-// #define VHPCK_USING_ENCODER 1
+#define VHPCK_USING_ENCODER 1
 
 // Predefined variables types
 /* #define u8 unsigned char
@@ -25,13 +25,12 @@
 
 class VHPCK {
 
-	private:
-
-		typedef struct { u8 *ptr; u8 msk; } stBITP;
+	public:
 		typedef struct { u32 pfx; u16 leno; u16 lenp; } stHDR;
 
-		stBITP wr,rd,tr;
-		u16 values[512]; u16 left[512]; u16 right[512]; u16 cnt; u16 nodes; u16 ptrlim;
+	private:
+		typedef struct { u8 *ptr; u8 msk; } stBITP;
+		stBITP wr,rd,tr; u16 values[512]; u16 left[512]; u16 right[512]; u16 cnt; u16 nodes; u16 ptrlim;
 
 #ifdef VHPCK_USING_ENCODER
 		u16 up[512]; u16 refs[256]; u8 backref[256]; u8 mrk[512];
@@ -62,9 +61,9 @@ class VHPCK {
 		verr Encode(cu8 *src, u16 len, u8 *pResult, u16 lim) {
 			cnt = 0; nodes = 0; SetPtr(&wr,pResult + sizeof(stHDR)); ptrlim = lim; // bitpointer setup
 			for(u16 i=0;i<256;i++) { refs[i] = 0xFFFF; }
-			for(u16 i=0;i<len;i++) { SPCInc(src[i]);} // Create spectrum
-			while(nodes>=2) {  NLnk(); nodes--; } // Link tree
-			u16 symcount = cnt; PByte(&wr,symcount); // Store tree, chars count, sym store path and descriptor term
+			SPCClr(); for(u16 i=0;i<len;i++) { SPCInc(src[i]);} // Create spectrum
+			u16 symcount = cnt; while(nodes-->=2) {  NLnk(); } // Link tree
+			PByte(&wr,symcount); // Store tree, chars count, sym store path and descriptor term
 			for(u16 i=0;i<symcount;i++) { PByte(&wr,backref[i]); u8 lenb=Path(i); while(lenb--) {PBit(&wr,1);PBit(&wr,TBit(&tr));DecPtr(&tr);} PBit(&wr,0);}
 			for(u16 i=0;i<len;i++) { u8 lenb = Path(refs[src[i]]); while(lenb--) { PBit( &wr, TBit(&tr)); DecPtr(&tr); } } // Store: Data, rev, d-path ... Save r-path
 			HDRFin((stHDR *)pResult,len,wr.ptr-pResult+(wr.msk==0x80?0:1)-sizeof(stHDR));
@@ -82,10 +81,9 @@ class VHPCK {
 				while(GBit(&rd)) { u16 *p=GBit(&rd)?&right[cur]:&left[cur]; if(*p!=0xFFFF) {cur=*p;} else {*p=cnt;NSLR(cnt,0xFFFF,0xFFFF);cur=cnt;cnt++;}}
 				values[cur] = sym; }
 			u16 unpacked = 0, cur = 0; // Restore datastream, using header
-			while(1) { cur = !GBit(&rd)?left[cur]:right[cur];
-				if(values[cur]!=0xFFFF) { // Endpoint ?
-					if(unpacked>=lim) break;  *pResult = (u8)values[cur] & 0xFF; cur = 0; pResult++; unpacked++; if(unpacked == phdr->leno) break;
-				} }
+			while(1) { cur = !GBit(&rd)?left[cur]:right[cur]; // Endpoint ?
+				if(values[cur]!=0xFFFF) { if(unpacked>=lim) break;  *pResult = (u8)values[cur] & 0xFF; cur = 0; pResult++; unpacked++; if(unpacked == phdr->leno) break; }
+			}
 			return (phdr->leno == unpacked) ? vok : verror(1);
 		}
 };
