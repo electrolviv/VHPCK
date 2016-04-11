@@ -1,6 +1,7 @@
 # VHPCK
 Data compression / decompression library for embedded application
 
+/*
 #include "lib_huffman.h"
 
 void test() {
@@ -23,3 +24,4 @@ void test() {
 		}
 	}
 } 
+*/
