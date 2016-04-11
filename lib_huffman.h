@@ -8,11 +8,19 @@
 #ifndef LIB_HUFFMAN_H_
 #define LIB_HUFFMAN_H_
 
+// Replace with your own system-depending header
 #include "vhboard.h"
 
+// Uncomment for enabling encoder, extra ~3K SRAM vars
+// #define VHPCK_USING_ENCODER 1
+
+// Predefined variables types
 /* #define u8 unsigned char
 #define u16 unsigned short
 #define u32 unsigned int32
+#define verr u32
+#define verror(X) X
+#define vok 0
 #define cu8 const u8 */
 
 class VHPCK {
@@ -23,10 +31,19 @@ class VHPCK {
 		typedef struct { u32 pfx; u16 leno; u16 lenp; } stHDR;
 
 		stBITP wr,rd,tr;
-		u16 values[512]; u16 left[512]; u16 right[512]; 	u16 up[512]; // 4K
-		u16 refs[256]; u8 backref[256]; u8 mrk[512]; //1.25K
-		u16 cnt; u16 nodes;
-		u16 ptrlim;
+		u16 values[512]; u16 left[512]; u16 right[512]; u16 cnt; u16 nodes; u16 ptrlim;
+
+#ifdef VHPCK_USING_ENCODER
+		u16 up[512]; u16 refs[256]; u8 backref[256]; u8 mrk[512];
+		u16 FindMin() { u16 min=0xFFFF, r=0xFFFF; for(u16 i=0;i<cnt;i++) { if(!mrk[i]) if(values[i]<min) {min=values[i];r= i;}} return r;}
+		void SPCNew(u8 sym) {refs[sym] = cnt; backref[cnt] = sym; values[cnt] = 0; mrk[cnt] = 0; NSLR(cnt,0xFFFF,0xFFFF); cnt++; nodes++; }
+		void SPCInc(u8 sym) {if(refs[sym] == 0xFFFF) { SPCNew(sym); } values[refs[sym]]++; }
+		void NLnk() { u16 idx1=FindMin(); mrk[idx1]=1; u16 idx2=FindMin(); mrk[idx2]=1;
+		values[cnt]=values[idx1]+values[idx2];NSLR(cnt,idx1,idx2);
+		mrk[cnt] = 0; up[idx1] = cnt; up[idx2] = cnt; cnt++; }
+		u8 Path(u16 i) { u16 cur = i; u8 lenb = 0; SetPtr(&tr,mrk); while(cur != (cnt-1)) { PBit(&tr, left[up[cur]]==cur); lenb++; cur = up[cur]; } DecPtr(&tr); return lenb; }
+		void HDRFin(stHDR *p, u16 o, u16 c) { p->pfx = 0x31484856; p->leno = o; p->lenp = c; } // Store header, 0x56484831 is VHH1
+#endif
 
 		void SetPtr(stBITP *p, u8 *pa) {p->ptr=pa;p->msk=0x80;}
 		void IncPtr(stBITP *p) {if(p->msk==0x01) {p->ptr++;p->msk=0x80;} else p->msk>>=1;}
@@ -36,19 +53,12 @@ class VHPCK {
 		u8 TBit(stBITP *p) { return (*p->ptr) & p->msk ? 1:0; }
 		u8 GBit(stBITP *p) { u8 r = TBit(p); IncPtr(p); return r; }
 		u8 GByte(stBITP *p) { u8 r = 0, c=8; while(c--) { r<<=1; r|=GBit(p); } return r; }
-		u16 FindMin() { u16 min=0xFFFF, r=0xFFFF; for(u16 i=0;i<cnt;i++) { if(!mrk[i]) if(values[i]<min) {min=values[i];r= i;}} return r;}
 		void NSLR(int i, u16 l, u16 r) {left[i]=l;right[i]=r;}
-		void NLnk() { u16 idx1=FindMin(); mrk[idx1]=1; u16 idx2=FindMin(); mrk[idx2]=1;
-		values[cnt]=values[idx1]+values[idx2];NSLR(cnt,idx1,idx2);
-		mrk[cnt] = 0; up[idx1] = cnt; up[idx2] = cnt; cnt++; }
 		void SPCClr() { for(u16 i=0;i<512;i++) values[i]=0xFFFF; } // Clear spectrum
-		void SPCNew(u8 sym) {refs[sym] = cnt; backref[cnt] = sym; values[cnt] = 0; mrk[cnt] = 0; NSLR(cnt,0xFFFF,0xFFFF); cnt++; nodes++; }
-		void SPCInc(u8 sym) {if(refs[sym] == 0xFFFF) { SPCNew(sym); } values[refs[sym]]++; }
-		u8 Path(u16 i) { u16 cur = i; u8 lenb = 0; SetPtr(&tr,mrk); while(cur != (cnt-1)) { PBit(&tr, left[up[cur]]==cur); lenb++; cur = up[cur]; } DecPtr(&tr); return lenb; }
-		void HDRFin(stHDR *p, u16 o, u16 c) { p->pfx = 0x31484856; p->leno = o; p->lenp = c; } // Store header, 0x56484831 is VHH1
 
 	public:
 
+#ifdef VHPCK_USING_ENCODER
 		verr Encode(cu8 *src, u16 len, u8 *pResult, u16 lim) {
 			cnt = 0; nodes = 0; SetPtr(&wr,pResult + sizeof(stHDR)); ptrlim = lim; // bitpointer setup
 			for(u16 i=0;i<256;i++) { refs[i] = 0xFFFF; }
@@ -60,6 +70,7 @@ class VHPCK {
 			HDRFin((stHDR *)pResult,len,wr.ptr-pResult+(wr.msk==0x80?0:1)-sizeof(stHDR));
 			return vok;
 		}
+#endif
 
 		verr Decode(cu8 *src, u8 *pResult, u16 lim) {
 			stHDR *phdr = (stHDR *)src;
