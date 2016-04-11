@@ -3,6 +3,7 @@ Data compression / decompression library for embedded application
 
 #include "lib_huffman.h"
 
+void test() {
 #define bufsize 1024
 	char testString[] = {
 			"This is a test string ! Packing & unpacking with classic Huffman encoding ..."\
@@ -21,5 +22,4 @@ Data compression / decompression library for embedded application
 			WIN32H_CreateSingleFile("b.bin", restoredString, mPCK.OSize(packedString));
 		}
 	}
-	
-	
+} 
