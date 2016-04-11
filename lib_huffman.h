@@ -13,7 +13,7 @@
 
 // Uncomment for enabling encoder, extra ~3K SRAM vars
 #define VHPCK_USING_ENCODER 1
-
+#define VHPCK_HDR 0x31484856
 // Predefined variables types
 /* #define u8 unsigned char
 #define u16 unsigned short
@@ -22,11 +22,13 @@
 #define verror(X) X
 #define vok 0
 #define cu8 const u8 */
+#define cvoid const void
 
 class VHPCK {
 
 	public:
 		typedef struct { u32 pfx; u16 leno; u16 lenp; } stHDR;
+		typedef enum { vOk=0, errWrongHDR, errWrongCRC, errSrc } enVHPCKErr;
 
 	private:
 		typedef struct { u8 *ptr; u8 msk; } stBITP;
@@ -41,7 +43,7 @@ class VHPCK {
 		values[cnt]=values[idx1]+values[idx2];NSLR(cnt,idx1,idx2);
 		mrk[cnt] = 0; up[idx1] = cnt; up[idx2] = cnt; cnt++; }
 		u8 Path(u16 i) { u16 cur = i; u8 lenb = 0; SetPtr(&tr,mrk); while(cur != (cnt-1)) { PBit(&tr, left[up[cur]]==cur); lenb++; cur = up[cur]; } DecPtr(&tr); return lenb; }
-		void HDRFin(stHDR *p, u16 o, u16 c) { p->pfx = 0x31484856; p->leno = o; p->lenp = c; } // Store header, 0x56484831 is VHH1
+		void HDRFin(stHDR *p, u16 o, u16 c) { p->pfx = VHPCK_HDR; p->leno = o; p->lenp = c; } // Store header, 0x56484831 is VHH1
 #endif
 
 		void SetPtr(stBITP *p, u8 *pa) {p->ptr=pa;p->msk=0x80;}
@@ -58,23 +60,24 @@ class VHPCK {
 	public:
 
 #ifdef VHPCK_USING_ENCODER
-		verr Encode(cu8 *src, u16 len, u8 *pResult, u16 lim) {
-			cnt = 0; nodes = 0; SetPtr(&wr,pResult + sizeof(stHDR)); ptrlim = lim; // bitpointer setup
+		verr Encode(cvoid *psrc, u16 len, u8 *pResult, u16 lim) {
+			u8 *src =(u8 *)psrc; cnt = 0; nodes = 0; SetPtr(&wr,pResult + sizeof(stHDR)); ptrlim = lim; // bitpointer setup
 			for(u16 i=0;i<256;i++) { refs[i] = 0xFFFF; }
 			SPCClr(); for(u16 i=0;i<len;i++) { SPCInc(src[i]);} // Create spectrum
 			u16 symcount = cnt; while(nodes-->=2) {  NLnk(); } // Link tree
 			PByte(&wr,symcount); // Store tree, chars count, sym store path and descriptor term
 			for(u16 i=0;i<symcount;i++) { PByte(&wr,backref[i]); u8 lenb=Path(i); while(lenb--) {PBit(&wr,1);PBit(&wr,TBit(&tr));DecPtr(&tr);} PBit(&wr,0);}
 			for(u16 i=0;i<len;i++) { u8 lenb = Path(refs[src[i]]); while(lenb--) { PBit( &wr, TBit(&tr)); DecPtr(&tr); } } // Store: Data, rev, d-path ... Save r-path
-			HDRFin((stHDR *)pResult,len,wr.ptr-pResult+(wr.msk==0x80?0:1)-sizeof(stHDR));
-			return vok;
+			HDRFin((stHDR *)pResult,len,wr.ptr-pResult+(wr.msk==0x80?0:1));
+			return vOk;
 		}
 #endif
-
-		verr Decode(cu8 *src, u8 *pResult, u16 lim) {
-			stHDR *phdr = (stHDR *)src;
-			cnt = 0; nodes = 0; SetPtr(&rd, (u8 *)src + sizeof(stHDR));
-			ptrlim = lim; SPCClr(); NSLR(cnt,0xFFFF,0xFFFF); cnt++; // Mark root
+		verr CheckHDR(void *p) {return ((stHDR *)p)->pfx==VHPCK_HDR?vok:errWrongHDR;}
+		u16 OSize(void *p) {return ((stHDR *)p)->leno;} // Uncompressed data length
+		u16 PSize(void *p) {return ((stHDR *)p)->lenp;} // Packed data length
+		verr Decode(cvoid *psrc, void *pResult, u16 lim) {
+			u8 *src=(u8*)psrc; u8 *pRes = (u8 *)pResult; stHDR *phdr = (stHDR *)src; cnt = 0; nodes = 0; SetPtr(&rd, (u8 *)src + sizeof(stHDR)); ptrlim = lim;
+			SPCClr(); NSLR(cnt,0xFFFF,0xFFFF); cnt++; // Mark root
 			u16 symcnt = GByte(&rd);
 			for(u16 i=0;i<symcnt;i++) { // Restore spectrum
 				u8 sym = GByte(&rd); u16 cur = 0;
@@ -82,9 +85,9 @@ class VHPCK {
 				values[cur] = sym; }
 			u16 unpacked = 0, cur = 0; // Restore datastream, using header
 			while(1) { cur = !GBit(&rd)?left[cur]:right[cur]; // Endpoint ?
-				if(values[cur]!=0xFFFF) { if(unpacked>=lim) break;  *pResult = (u8)values[cur] & 0xFF; cur = 0; pResult++; unpacked++; if(unpacked == phdr->leno) break; }
+				if(values[cur]!=0xFFFF) { if(unpacked>=lim) break;  *pRes = (u8)values[cur] & 0xFF; cur = 0; pRes++; unpacked++; if(unpacked == phdr->leno) break; }
 			}
-			return (phdr->leno == unpacked) ? vok : verror(1);
+			return (phdr->leno==unpacked)?vOk:errSrc;
 		}
 };
 
