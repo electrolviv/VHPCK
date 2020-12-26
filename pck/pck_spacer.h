@@ -8,7 +8,7 @@
 #ifndef PCK_SPACER_H_
 #define PCK_SPACER_H_
 
-#include "vhboard.h"
+#include "vhplatform.h"
 
 typedef enum {
 	ePCK_Done = 0,
