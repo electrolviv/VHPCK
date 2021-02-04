@@ -53,32 +53,28 @@ public:
 
     u8 GBit()  { if(!cm) { cm=0x80; cv=_gb(); } u8 r=cv&cm?1:0; cm>>=1; return r; }
     u8 GByte() { u8 r = 0; for(u8 i=0;i<8;i++) { r<<=1; r|=GBit(); } return r; }
+    void rst(u8 idx) { tbllef[idx]=inv; tblrig[idx]=inv; tblval[idx]=inv; }
 
     void DecodeChunk(u8 dstlen) {
-        u8 symcnt = GByte(), pos = 0;
-        tbllef[0] = inv; tblrig[0] = inv; tblval[0] = inv; elms = 1;
+        u8 symcnt = GByte(), pos = 0, cnt = 0, elms = 1; rst(0);
         for(u8 i=0;i<symcnt;i++) { u8 sym = GByte(), cur = 0;
             while(GBit()) { u8 *p=GBit()?&tblrig[cur]:&tbllef[cur];
-                if(*p==inv) { *p=elms; tbllef[elms]=inv; tblrig[elms]=inv;
-                    tblval[elms]=inv; cur=elms++;} else {cur=*p;} } tblval[cur] = sym; }
-        for(u8 cnt = 0; cnt != dstlen;) { pos = ! GBit() ? tbllef[pos]:tblrig[pos];
-            u8 sym = tblval[pos]; if(tbllef[pos]==inv) { _pb(sym); pos = 0; cnt++; }}}
+                if(*p==inv) { *p=elms; rst(elms); cur=elms++;}
+                else {cur=*p;} } tblval[cur] = sym; }
+        while(cnt != dstlen) { pos = ! GBit() ? tbllef[pos]:tblrig[pos];
+            if(tbllef[pos]==inv) { _pb(tblval[pos]); pos = 0; cnt++; }}}
 
     void Decode() {
-        cm = 0;
-        for(;;) {
-            u8 chkt = (GBit() << 1) + GBit();
+        cm = 0; for(;;) { u8 chkt = (GBit() << 1) + GBit();
             if (chkt == 1) { DecodeChunk(GByte()); }
             else if (chkt == 2) { u8 cnt = GByte();
                 for(u8 i=0;i<cnt;i++) _pb(GByte()); }
             else if (chkt == 3) { u8 cnt = GByte(), sym = GByte();
-                for(u8 i=0;i<cnt;i++)
-                    _pb(sym); }
-            else break; } }
+                for(u8 i=0;i<cnt;i++) _pb(sym); } else break; } }
 
 private:
 
-    u8 *tblval; u8 *tbllef; u8 *tblrig; u8 elms;
+    u8 *tblval; u8 *tbllef; u8 *tblrig;
     funcget _gb;
     funcput _pb;
     u8 cv, cm;
