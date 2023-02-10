@@ -21,7 +21,7 @@ $>make
 ```
 #!/bin/sh
 arm-none-eabi-g++ -O0 -DSTM32 -mcpu=cortex-m4 -I../../../pck10 -c testpck10.cpp
-arm-none-eabi-objdump -Sg testpck10.o > testpck10.s
+arm-none-eabi-objdump -S testpck10.o > testpck10.s
 ```
 
 Output:
