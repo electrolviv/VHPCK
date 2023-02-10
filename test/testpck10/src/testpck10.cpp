@@ -17,8 +17,8 @@ const char strtst[] =
         "|00000000000000|"
         "+--------------+";
 
-#define UNPACKED_SIZE 128
-volatile char unpacked[UNPACKED_SIZE];
+#define UNPACKED_BUFF_SIZE 1024
+volatile char unpacked[UNPACKED_BUFF_SIZE];
 
 VHPCK pck;
 
@@ -42,7 +42,7 @@ bool WriteBinFile(char *fname, u8 *src, u16 srclen) {
 
 void testpack() {
 
-    rvale = pck.Encode(strtst, sizeof(strtst), encodermem, 1024);
+    rvale = pck.Encode(strtst, sizeof(strtst) - 1, encodermem, 1024);
 
 #ifdef __linux__
     VHPCK::stHDR *phdr = (VHPCK::stHDR *)encodermem;
@@ -53,7 +53,7 @@ void testpack() {
 }
 
 void testunpack() {
-    rvald = pck.Decode(encodermem, (void *)unpacked, UNPACKED_SIZE);
+    rvald = pck.Decode(encodermem, (void *)unpacked, UNPACKED_BUFF_SIZE);
 #if defined(__linux__)
     VHPCK::stHDR *phdr = (VHPCK::stHDR *)encodermem;
     for(int i=0;i<phdr->leno;i++)
